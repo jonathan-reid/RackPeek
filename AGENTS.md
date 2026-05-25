@@ -129,6 +129,31 @@ just rpk [args]         # run CLI directly from Debug build
 just clean              # dotnet clean
 ```
 
+#### Dev with an external config file (`docker compose`)
+
+`docker-compose.yml` runs the container with `config.yaml` kept **outside** the
+image so you can edit it live on the host and persist it across container
+restarts:
+
+```bash
+docker compose up -d     # http://localhost:8080, config bind-mounted from host
+docker compose down
+```
+
+- It **bind-mounts the host `config-quindar/` directory onto `/app/config`** (where
+  `RPK_YAML_DIR` points). Edits to `config-quindar/config.yaml` are picked up by
+  the running container; the Web UI writes back to that same host file.
+- `config-quindar/config.yaml` is **checked into git** as the sample/dev config
+  (it is not matched by the `**/config/` gitignore rule).
+- **It pulls `aptacode/rackpeek:latest` from the registry — it does NOT build from
+  local source.** To exercise local changes through compose, first build and tag
+  the image yourself (`docker build -t aptacode/rackpeek:latest -f RackPeek.Web/Dockerfile .`),
+  or use `just run-docker` which always builds the local `Dockerfile`.
+- The bind mount is declared via an **absolute `device:` path** in `docker-compose.yml`
+  (`/mnt/d/.../config-quindar`). It is machine-specific — other contributors must
+  point it at their own checkout (or switch to a relative `./config-quindar:/app/config`
+  bind mount) before `docker compose up` will work.
+
 ### Release
 
 ```bash
@@ -154,7 +179,7 @@ Enforced by CI via `dotnet format --verify-no-changes`. From `.editorconfig` + `
 - `var` for built-in types and when the type is apparent; explicit type otherwise.
 - Expression-bodied members only when on a single line.
 - Private fields are `_camelCase` (underscore prefix, error severity).
-- Open braces on a new line (Allman) — `csharp_new_line_before_open_brace = all:error`.
+- **Braces go on the same line (K&R), e.g. `public class Foo {`.** Match the committed code (`Port.cs`, `AnsiStripper.cs`, `ConsoleRunner.cs`, the `.razor` `@code` blocks). Although `.editorconfig` declares `csharp_new_line_before_open_brace = all:error`, `dotnet format --verify-no-changes` (the CI gate) does NOT enforce it: the whole codebase is same-line and passes. Writing Allman braces would be inconsistent with every existing file. When unsure, run `dotnet format --verify-no-changes` and match whatever it leaves untouched.
 - **Warnings are errors** repo-wide. Don't introduce nullable warnings or analyzer warnings.
 - Nullable reference types enabled in every project (`<Nullable>enable</Nullable>`).
 
@@ -287,7 +312,7 @@ Default branches: feature work targets `staging`; releases flow `staging → mai
 - **TreatWarningsAsErrors** — a stray `unused-variable` warning fails the whole build. Don't add `#pragma warning disable` to push through; fix the warning.
 - **Git integration** is optional and silently no-ops when `GIT_TOKEN` is absent (`NullGitRepository`). Don't assume git is wired up.
 - **Single YAML file**: concurrent writes from CLI + Web are not coordinated beyond file replacement. Treat the Web UI as the source of truth while it's running.
-- The `RackPeek.Web/config copy/` directory looks like cruft but is checked-in — leave it alone unless cleaning up is the explicit goal.
+- **`config-quindar/` is the checked-in dev config dir** bind-mounted by `docker-compose.yml` onto `/app/config` (see §4 → "Dev with an external config file"). It is the live config for `docker compose up`; don't delete it or assume it's cruft. The container does **not** carry config inside the image in this mode — it lives on the host.
 - The Web Docker image bundles **both** the Web app and the CLI binary (`rpk` is placed in `/usr/local/bin`). You can `docker exec rackpeek rpk ...` against a running container.
 
 ---
@@ -303,6 +328,8 @@ Default branches: feature work targets `staging`; releases flow `staging → mai
 | `.github/workflows/test.yml` | CI pipeline (format → cli-tests → webui-tests) |
 | `.github/workflows/publish-*.yml` | Release pipelines |
 | `RackPeek.Web/Dockerfile` | Multi-stage build for the runtime image |
+| `docker-compose.yml` | Dev compose: runs the published image with `config-quindar/` bind-mounted as external config |
+| `config-quindar/` | Checked-in dev `config.yaml`, bind-mounted onto `/app/config` by compose |
 | `RackPeek/Program.cs` | CLI entry point |
 | `RackPeek.Web/Program.cs` | Web entry point + DI wiring |
 | `Shared.Rcl/CliBootstrap.cs` | Master CLI command registration |

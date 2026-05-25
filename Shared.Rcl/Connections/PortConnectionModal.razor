@@ -73,9 +73,12 @@
 
                             <option value="">Select port</option>
 
+                            @* value="@i" stays the physical per-group index; only the label is offset.
+                               _resourceA is non-null whenever _groupA is (see _groupAIndex setter), so the
+                               ?. yields offset 0 rather than throwing — do not remove it as dead code. *@
                             @for (var i = 0; i < _groupA.Count; i++)
                             {
-                                <option value="@i">Port @(i + 1)</option>
+                                <option value="@i">Port @(PortNumbering.Offset(_resourceA?.Ports, _portA.PortGroup) + i + 1)</option>
                             }
 
                         </select>
@@ -135,9 +138,10 @@
 
                             <option value="">Select port</option>
 
+                            @* value="@i" stays the physical per-group index; only the label is offset. *@
                             @for (var i = 0; i < _groupB.Count; i++)
                             {
-                                <option value="@i">Port @(i + 1)</option>
+                                <option value="@i">Port @(PortNumbering.Offset(_resourceB?.Ports, _portB.PortGroup) + i + 1)</option>
                             }
 
                         </select>

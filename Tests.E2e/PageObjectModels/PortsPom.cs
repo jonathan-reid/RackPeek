@@ -163,4 +163,19 @@ public class PortsPom(IPage page) {
 
         await PortSubmit(prefix).ClickAsync();
     }
+
+    // -------------------------------------------------
+    // Continuous port-numbering assertions
+    // -------------------------------------------------
+
+    public async Task AssertPortLabelAsync(string prefix, int groupIndex, int portIndex, string expected)
+        => await Assertions.Expect(Port(prefix, groupIndex, portIndex)).ToHaveTextAsync(expected);
+
+    public async Task AssertPortTooltipAsync(string prefix, int groupIndex, int portIndex, string expected)
+        => await Assertions.Expect(Port(prefix, groupIndex, portIndex)).ToHaveAttributeAsync("title", expected);
+
+    public async Task AssertPortAOptionAsync(string prefix, string label)
+        => await Assertions.Expect(
+            PortASelect(prefix).GetByText(label, new LocatorGetByTextOptions { Exact = true }))
+            .ToHaveCountAsync(1);
 }

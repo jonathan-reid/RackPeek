@@ -393,4 +393,94 @@ public class AccessPointCardTests(
             await context.CloseAsync();
         }
     }
+
+    [Fact]
+    public async Task Port_Numbers_Are_Continuous_Across_Groups() {
+        (IBrowserContext context, IPage page) = await CreatePageAsync();
+
+        var src = $"e2e-ap-{Guid.NewGuid():N}"[..16];
+        var dst = $"e2e-ap-{Guid.NewGuid():N}"[..16];
+
+        try {
+            await page.GotoAsync(_fixture.BaseUrl);
+
+            var layout = new MainLayoutPom(page);
+            await layout.AssertLoadedAsync();
+            await layout.GotoHardwareAsync();
+
+            var hardwareTree = new HardwareTreePom(page);
+            await hardwareTree.AssertLoadedAsync();
+            await hardwareTree.GotoAccessPointsListAsync();
+
+            var list = new AccessPointsListPom(page);
+            await list.AssertLoadedAsync();
+
+            var card = new AccessPointCardPom(page);
+
+            // src AP: group 0 = 3 ports, group 1 = 2 ports
+            await list.AddAccessPointAsync(src);
+            await page.WaitForURLAsync($"**/resources/hardware/{src}");
+            await card.AssertCardVisibleAsync(src);
+
+            await card.AddPortGroupAsync("rj45", "1", 3);
+            await card.AddPortGroupAsync("sfp+", "2.5", 2);
+
+            // Group 1 (offset 3) ports must read 4 and 5, not 1 and 2.
+            await card.Ports.AssertPortLabelAsync("accesspoint-ports", 1, 0, "4");
+            await card.Ports.AssertPortLabelAsync("accesspoint-ports", 1, 1, "5");
+
+            // dst AP: single group, 2 ports
+            await layout.GotoHardwareAsync();
+            await hardwareTree.GotoAccessPointsListAsync();
+            await list.AssertLoadedAsync();
+            await list.AddAccessPointAsync(dst);
+            await page.WaitForURLAsync($"**/resources/hardware/{dst}");
+            await card.AssertCardVisibleAsync(dst);
+            await card.AddPortGroupAsync("rj45", "1", 2);
+
+            // Back to src, open the connection modal from group 1 port 0
+            await layout.GotoHardwareAsync();
+            await hardwareTree.GotoAccessPointsListAsync();
+            await list.AssertLoadedAsync();
+            await list.OpenAccessPointAsync(src);
+            await card.AssertCardVisibleAsync(src);
+
+            await card.OpenConnectionFromPortAsync(1, 0);
+
+            // The side-A port dropdown labels are continuous too (Port 4 / Port 5).
+            await card.Ports.AssertPortAOptionAsync("accesspoint-ports", "Port 4");
+            await card.Ports.AssertPortAOptionAsync("accesspoint-ports", "Port 5");
+
+            // Connect src "Port 4" (group 1, physical index 0) to dst "Port 1".
+            await card.CreateConnectionAsync(
+                src,
+                "sfp+ — 2.5 Gbps (2)",
+                "Port 4",
+                dst,
+                "rj45 — 1 Gbps (2)",
+                "Port 1");
+
+            // dst side: destination offset is computed from src's groups, so dst's
+            // connected port shows "src (port 4)".
+            await layout.GotoHardwareAsync();
+            await hardwareTree.GotoAccessPointsListAsync();
+            await list.AssertLoadedAsync();
+            await list.OpenAccessPointAsync(dst);
+            await card.AssertCardVisibleAsync(dst);
+            await card.Ports.AssertPortTooltipAsync("accesspoint-ports", 0, 0, $"{src} (port 4)");
+
+            // Persisted-index gate: src group 1 port 0 is keyed on the physical index 0,
+            // so it shows the connection ("dst (port 1)"). A corrupted dropdown value
+            // would persist a wrong index and this port would read "Available".
+            await layout.GotoHardwareAsync();
+            await hardwareTree.GotoAccessPointsListAsync();
+            await list.AssertLoadedAsync();
+            await list.OpenAccessPointAsync(src);
+            await card.AssertCardVisibleAsync(src);
+            await card.Ports.AssertPortTooltipAsync("accesspoint-ports", 1, 0, $"{dst} (port 1)");
+        }
+        finally {
+            await context.CloseAsync();
+        }
+    }
 }

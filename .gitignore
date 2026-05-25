@@ -427,3 +427,6 @@ FodyWeavers.xsd
 
 # macOS
 .DS_Store
+
+# Personal, per-developer Claude Code notes (never shared)
+CLAUDE.local.md

@@ -44,7 +44,7 @@ else
 
                     <div class="truncate">
                         <span class="text-zinc-500">
-                            @(index + 1)
+                            @(_localOffset + index + 1)
                         </span>
                         <span> - </span>
                         <span>@other!.Resource</span>
@@ -54,7 +54,7 @@ else
                         {
                             <div class="text-[9px] text-zinc-400 leading-tight">
                                 @otherGroup.Type — @otherGroup.Speed Gbps
-                                (port @(other.PortIndex + 1) / @otherGroup.Count)
+                                (port @(DestinationOffset(other) + other.PortIndex + 1) / @otherGroup.Count)
                             </div>
                         }
 
@@ -71,7 +71,7 @@ else
 
        <div>
     <span class="text-zinc-500">
-        @(index + 1)
+        @(_localOffset + index + 1)
     </span>
     <span> - </span>
     <span class="text-zinc-700 italic">free</span>
@@ -100,10 +100,25 @@ else
 
     private List<Connection> _connections = new();
     private readonly Dictionary<string, IPortResource?> _portResources = new();
+    private int _localOffset;
 
     protected override async Task OnParametersSetAsync()
     {
         _connections = (await Repository.GetConnectionsAsync()).ToList();
+
+        if (!string.IsNullOrWhiteSpace(ResourceName))
+        {
+            var res = await Repository.GetByNameAsync(ResourceName);
+            _localOffset = PortNumbering.Offset((res as IPortResource)?.Ports, PortGroupIndex);
+        }
+    }
+
+    int DestinationOffset(PortReference other)
+    {
+        if (!_portResources.ContainsKey(other.Resource))
+            GetDestinationPortGroup(other);
+
+        return PortNumbering.Offset(_portResources.GetValueOrDefault(other.Resource)?.Ports, other.PortGroup);
     }
 
     async Task HandlePortClick(PortReference port)

@@ -1,5 +1,6 @@
 ﻿@using RackPeek.Domain.Persistence
 @using RackPeek.Domain.Resources.Connections
+@using RackPeek.Domain.Resources.Servers
 @using RackPeek.Domain.Resources.SubResources
 @inject IResourceCollection Repository
 
@@ -48,7 +49,7 @@
                 </div>
 
                 <div class="text-[8px] text-zinc-500 mt-[1px]">
-                    @(index + 1)
+                    @(_localOffset + index + 1)
                 </div>
 
             </button>
@@ -70,14 +71,50 @@
     [Parameter] public EventCallback<PortReference> OnPortClicked { get; set; }
 
     private List<Connection> _connections = new();
+    private readonly Dictionary<string, IReadOnlyList<Port>?> _portResources = new();
+    private int _localOffset;
+
     private string BaseTestId =>
         string.IsNullOrWhiteSpace(TestIdPrefix)
             ? "port-visualizer"
             : TestIdPrefix;
-    
+
     protected override async Task OnParametersSetAsync()
     {
         _connections = (await Repository.GetConnectionsAsync()).ToList();
+
+        if (!string.IsNullOrWhiteSpace(ResourceName))
+        {
+            var res = await Repository.GetByNameAsync(ResourceName);
+            _localOffset = PortNumbering.Offset((res as IPortResource)?.Ports, PortGroupIndex);
+        }
+
+        await PreloadDestinationsAsync();
+    }
+
+    async Task PreloadDestinationsAsync()
+    {
+        foreach (var conn in _connections)
+        {
+            var other = OtherEndpointForThisGroup(conn);
+
+            if (other is null || _portResources.ContainsKey(other.Resource))
+                continue;
+
+            var res = await Repository.GetByNameAsync(other.Resource);
+            _portResources[other.Resource] = (res as IPortResource)?.Ports;
+        }
+    }
+
+    PortReference? OtherEndpointForThisGroup(Connection conn)
+    {
+        if (conn.A.Resource == ResourceName && conn.A.PortGroup == PortGroupIndex)
+            return conn.B;
+
+        if (conn.B.Resource == ResourceName && conn.B.PortGroup == PortGroupIndex)
+            return conn.A;
+
+        return null;
     }
 
     async Task SelectPort(int index, PortReference port)
@@ -113,7 +150,11 @@
                 ? conn.B
                 : conn.A;
 
-        return $"{other.Resource} (port {other.PortIndex + 1})";
+        // GetTooltip stays synchronous and pure: destination ports are preloaded
+        // into _portResources by OnParametersSetAsync, so no blocking I/O here.
+        var destOffset = PortNumbering.Offset(_portResources.GetValueOrDefault(other.Resource), other.PortGroup);
+
+        return $"{other.Resource} (port {destOffset + other.PortIndex + 1})";
     }
 
 }
